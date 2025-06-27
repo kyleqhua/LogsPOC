@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"time"
@@ -67,39 +67,39 @@ type EmitterConfig struct {
 	FlushInterval  time.Duration // how often to send packets
 }
 
-// EmitterStatus tracks the health and performance of an emitter (agent)
-type EmitterStatus struct {
-	ID             string    `json:"id"`
-	IsConnected    bool      `json:"is_connected"`
-	LastConnection time.Time `json:"last_connection"`
-	SuccessCount   int64     `json:"success_count"`
-	FailureCount   int64     `json:"failure_count"`
-	AverageLatency float64   `json:"average_latency"` // milliseconds
-	LastError      string    `json:"last_error"`
-	ActiveRequests int       `json:"active_requests"`
-	MessagesSent   int64     `json:"messages_sent"`
-	PacketsSent    int64     `json:"packets_sent"`
-}
+// // EmitterStatus tracks the health and performance of an emitter (agent)
+// type EmitterStatus struct {
+// 	ID             string    `json:"id"`
+// 	IsConnected    bool      `json:"is_connected"`
+// 	LastConnection time.Time `json:"last_connection"`
+// 	SuccessCount   int64     `json:"success_count"`
+// 	FailureCount   int64     `json:"failure_count"`
+// 	AverageLatency float64   `json:"average_latency"` // milliseconds
+// 	LastError      string    `json:"last_error"`
+// 	ActiveRequests int       `json:"active_requests"`
+// 	MessagesSent   int64     `json:"messages_sent"`
+// 	PacketsSent    int64     `json:"packets_sent"`
+// }
 
-// EmitterMetrics holds performance metrics for an emitter (agent)
-type EmitterMetrics struct {
-	ID              string    `json:"id"`
-	Timestamp       time.Time `json:"timestamp"`
-	TotalPackets    int64     `json:"total_packets"`
-	TotalMessages   int64     `json:"total_messages"`
-	SuccessfulSends int64     `json:"successful_sends"`
-	FailedSends     int64     `json:"failed_sends"`
-	AverageLatency  float64   `json:"average_latency"`
-	MinLatency      float64   `json:"min_latency"`
-	MaxLatency      float64   `json:"max_latency"`
-	Throughput      float64   `json:"throughput"` // packets per second
-}
+// // EmitterMetrics holds performance metrics for an emitter (agent)
+// type EmitterMetrics struct {
+// 	ID              string    `json:"id"`
+// 	Timestamp       time.Time `json:"timestamp"`
+// 	TotalPackets    int64     `json:"total_packets"`
+// 	TotalMessages   int64     `json:"total_messages"`
+// 	SuccessfulSends int64     `json:"successful_sends"`
+// 	FailedSends     int64     `json:"failed_sends"`
+// 	AverageLatency  float64   `json:"average_latency"`
+// 	MinLatency      float64   `json:"min_latency"`
+// 	MaxLatency      float64   `json:"max_latency"`
+// 	Throughput      float64   `json:"throughput"` // packets per second
+// }
 
 // EmitterPool manages multiple emitters (agents) that send to the distributor
 type EmitterPool interface {
 	GetEmitter(emitterID string) (Emitter, error)
 	GetAllEmitters() map[string]Emitter
-	UpdateEmitterStatus(emitterID string, status EmitterStatus)
-	GetEmitterStatus(emitterID string) (EmitterStatus, error)
-	GetPoolMetrics() map[string]EmitterMetrics
+	// UpdateEmitterStatus(emitterID string, status EmitterStatus)
+	// GetEmitterStatus(emitterID string) (EmitterStatus, error)
+	// GetPoolMetrics() map[string]EmitterMetrics
 }
