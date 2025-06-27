@@ -1,21 +1,20 @@
-# Resolve - Distributed Log Processing System
+#Distributed Log Processing System
 
-A robust, fault-tolerant distributed log processing system with emitter servers, distributors, and analyzers, all containerized with Docker. Features automatic message queuing, rerouting, and zero message loss even when analyzers fail.
+A POC distributed log processing system with emitter servers, distributors, and analyzers, all containerized with Docker. Features basic automatic message queuing, rerouting, and zero message loss even when analyzers fail.
 
-## Key Features
+## Features
 
-- **Zero Message Loss**: Robust queue system ensures no messages are lost even when analyzers are down
+- **Zero Message Loss**: Queue system ensures no messages are lost even when analyzers are down
 - **Automatic Rerouting**: Failed messages are automatically rerouted to healthy analyzers
 - **Dynamic Analyzer Control**: Enable/disable analyzers on-the-fly to simulate failures
-- **Weighted Load Balancing**: Intelligent distribution based on analyzer weights
-- **Health Monitoring**: Real-time health checks and queue status monitoring
-- **Accurate Metrics**: Precise message counting and distribution statistics
+- **Weighted Load Balancing**: Distribution based on analyzer weights, re weights made if analyzer goes down
+- **Monitoring**: Real-time health checks and queue status monitoring + message counting and distribution 
 
 ## Architecture
 
 The system consists of three main components:
 
-1. **Emitter Server** - Generates log messages and sends them to distributors (250 messages per generate call)
+1. **Emitter Server** - Generates log messages and sends them to distributors (250 messages per generate call or 10 logs / sec)
 2. **Distributor** - Receives logs, distributes them using weighted load balancing, and queues failed messages for retry
 3. **Analyzers** - Process individual log messages with enable/disable capability (multiple instances supported)
 
@@ -110,8 +109,8 @@ Once running, the following endpoints are available:
 
 #### Simulate Analyzer Failure
 ```bash
-# Disable an analyzer
-curl -X POST http://localhost:8082/disable
+# Disable an analyzer, change port per analyzer
+curl -X POST http://localhost:8082/disable 
 
 # Generate logs (messages will be queued/rerouted)
 ./docker-scripts.sh generate
