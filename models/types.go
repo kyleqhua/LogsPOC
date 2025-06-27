@@ -41,10 +41,9 @@ type AnalyzerConfig struct {
 
 // DistributorConfig holds the overall configuration
 type DistributorConfig struct {
-	Analyzers        []AnalyzerConfig
-	Port             int
-	TotalWeight      float64 // calculated field
-	NormalizeWeights bool    // auto-normalize if needed
+	Analyzers   []AnalyzerConfig
+	Port        int
+	TotalWeight float64 // calculated field
 }
 
 // Emitter interface for sending log packets to the distributor
