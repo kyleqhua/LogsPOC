@@ -144,6 +144,46 @@ start_log_generation() {
     print_status "Continuous log generation started"
 }
 
+# Function to verify weights
+verify_weights() {
+    echo "Fetching processed counts from analyzers..."
+    
+    # Get counts for each analyzer
+    resp1=$(curl -s http://localhost:8082/processed)
+    count1=$(echo "$resp1" | grep -o '"processed_count":[0-9]*' | grep -o '[0-9]*')
+    
+    resp2=$(curl -s http://localhost:8083/processed)
+    count2=$(echo "$resp2" | grep -o '"processed_count":[0-9]*' | grep -o '[0-9]*')
+    
+    resp3=$(curl -s http://localhost:8084/processed)
+    count3=$(echo "$resp3" | grep -o '"processed_count":[0-9]*' | grep -o '[0-9]*')
+    
+    total=$((count1 + count2 + count3))
+    
+    echo "analyzer-1 (weight 1.0): $count1 messages processed"
+    echo "analyzer-2 (weight 2.0): $count2 messages processed"
+    echo "analyzer-3 (weight 1.0): $count3 messages processed"
+    echo
+    
+    if [ $total -gt 0 ]; then
+        percent1=$(awk "BEGIN {printf \"%.2f\", ($count1/$total)*100}")
+        percent2=$(awk "BEGIN {printf \"%.2f\", ($count2/$total)*100}")
+        percent3=$(awk "BEGIN {printf \"%.2f\", ($count3/$total)*100}")
+        
+        echo "analyzer-1: $count1 messages ($percent1% of total, expected weight 1.0)"
+        echo "analyzer-2: $count2 messages ($percent2% of total, expected weight 2.0)"
+        echo "analyzer-3: $count3 messages ($percent3% of total, expected weight 1.0)"
+        echo
+        
+        echo "Expected distribution (by weight):"
+        echo "analyzer-1: 25.00%"
+        echo "analyzer-2: 50.00%"
+        echo "analyzer-3: 25.00%"
+    else
+        echo "No messages processed yet. Try generating some logs first."
+    fi
+}
+
 # Function to show usage
 show_usage() {
     echo "Resolve Docker Management Script"
@@ -162,6 +202,7 @@ show_usage() {
     echo "  cleanup         Clean up Docker resources"
     echo "  generate        Generate test logs"
     echo "  start-logs      Start continuous log generation"
+    echo "  verify-weights  Verify analyzer processed counts"
     echo "  help            Show this help message"
     echo ""
     echo "Examples:"
@@ -205,6 +246,9 @@ case "${1:-help}" in
         ;;
     start-logs)
         start_log_generation
+        ;;
+    verify-weights)
+        verify_weights
         ;;
     help|--help|-h)
         show_usage

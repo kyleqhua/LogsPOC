@@ -31,4 +31,4 @@ COPY distributor/docker_config.json ./config.json
 EXPOSE 8080
 
 # Run the distributor
-CMD ["./distributor", "-config", "./config.json"] 
+CMD ["./distributor", "./config.json"] 
