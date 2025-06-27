@@ -1,6 +1,9 @@
-#Distributed Log Processing System
+# Distributed Log Processing System
 
 A POC distributed log processing system with emitter servers, distributors, and analyzers, all containerized with Docker. Features basic automatic message queuing, rerouting, and zero message loss even when analyzers fail.
+
+## Write up:
+[Project Write Up and Thoughts](https://docs.google.com/document/d/1AUoJjDDUgHR_ffd0-jCmaHaVdjNPOoz8drDgOIonCEI/edit?tab=t.0)
 
 ## Features
 
@@ -109,7 +112,7 @@ Once running, the following endpoints are available:
 
 #### Simulate Analyzer Failure
 ```bash
-# Disable an analyzer, change port per analyzer
+# Disable an analyzer, change port per
 curl -X POST http://localhost:8082/disable 
 
 # Generate logs (messages will be queued/rerouted)
@@ -329,58 +332,6 @@ cd docker
 docker-compose up --build [service-name]
 ```
 
-### Development
-
-#### Building Individual Services
-```bash
-cd docker
-# Build emitter server
-docker build -f Dockerfile.emitter -t resolve-emitter ..
-
-# Build distributor
-docker build -f Dockerfile.distributor -t resolve-distributor ..
-
-# Build analyzer
-docker build -f Dockerfile.analyzer -t resolve-analyzer ..
-```
-
-#### Running Individual Containers
-```bash
-# Run emitter server
-docker run -p 8080:8080 resolve-emitter
-
-# Run distributor
-docker run -p 8081:8080 resolve-distributor
-
-# Run analyzer
-docker run -p 8082:8081 resolve-analyzer ./analyzer analyzer-1 8081
-```
-
-## Project Structure
-
-```
-resolve/
-├── docker/                    # Docker configuration files
-│   ├── Dockerfile.emitter     # Emitter server Dockerfile
-│   ├── Dockerfile.distributor # Distributor Dockerfile
-│   ├── Dockerfile.analyzer    # Analyzer Dockerfile
-│   ├── docker-compose.yml     # Docker Compose configuration
-│   ├── .dockerignore          # Docker ignore file
-│   └── docker-scripts.sh      # Management script
-├── docker.sh                  # Wrapper script (run from root)
-├── emitterServer/             # Emitter server source code
-│   ├── emitter_server.go      # Main emitter server code
-│   ├── config.json            # Local development config
-│   └── docker_config.json     # Docker deployment config
-├── distributor/               # Distributor source code
-│   ├── distributor.go         # Main distributor code with queue system
-│   ├── local_config.json      # Local development config
-│   └── docker_config.json     # Docker deployment config
-├── analyzers/                 # Analyzer source code with enable/disable
-├── emitters/                  # Emitter implementations
-├── models/                    # Data models
-└── README.md                  # This file
-```
 
 ## Network Architecture
 
@@ -417,11 +368,3 @@ resolve/
 - Scale horizontally by adding more analyzer instances
 - Monitor processing times and adjust accordingly
 - Use enable/disable for maintenance or load testing
-
-## Reliability Features
-
-- **Message Persistence**: Failed messages are queued until delivery
-- **Automatic Recovery**: Messages are automatically rerouted when analyzers come back online
-- **Health Monitoring**: Real-time health checks and status monitoring
-- **Graceful Degradation**: System continues operating with reduced capacity when analyzers are down
-- **Zero Message Loss**: Guaranteed delivery through persistent queuing and retry mechanisms 
