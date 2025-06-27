@@ -1,0 +1,9 @@
+{
+  "port": 8080,
+  "distributor_urls": ["http://localhost:8080/logs"],
+  "log_generation_rate": 10,
+  "max_concurrency": 5,
+  "batch_size": 50,
+  "flush_interval": 1000,
+  "emitters_per_distributor": 5
+} 

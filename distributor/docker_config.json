@@ -1,0 +1,29 @@
+{
+  "port": 8080,
+  "analyzers": [
+    {
+      "id": "analyzer-1",
+      "weight": 1.0,
+      "enabled": true,
+      "endpoint": "http://analyzer-1:8081/analyze",
+      "timeout": 10000,
+      "retry_count": 3
+    },
+    {
+      "id": "analyzer-2",
+      "weight": 2.0,
+      "enabled": true,
+      "endpoint": "http://analyzer-2:8082/analyze",
+      "timeout": 10000,
+      "retry_count": 3
+    },
+    {
+      "id": "analyzer-3",
+      "weight": 1.0,
+      "enabled": true,
+      "endpoint": "http://analyzer-3:8083/analyze",
+      "timeout": 10000,
+      "retry_count": 3
+    }
+  ]
+} 

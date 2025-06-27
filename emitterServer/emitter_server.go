@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -23,12 +24,13 @@ type EmitterServer struct {
 
 // EmitterServerConfig holds the configuration for the emitter server
 type EmitterServerConfig struct {
-	Port              int      `json:"port"`
-	DistributorURLs   []string `json:"distributor_urls"`
-	LogGenerationRate int      `json:"log_generation_rate"` // logs per second
-	MaxConcurrency    int      `json:"max_concurrency"`
-	BatchSize         int      `json:"batch_size"`
-	FlushInterval     int      `json:"flush_interval"` // milliseconds
+	Port                   int      `json:"port"`
+	DistributorURLs        []string `json:"distributor_urls"`
+	LogGenerationRate      int      `json:"log_generation_rate"` // logs per second
+	MaxConcurrency         int      `json:"max_concurrency"`
+	BatchSize              int      `json:"batch_size"`
+	FlushInterval          int      `json:"flush_interval"`           // milliseconds
+	EmittersPerDistributor int      `json:"emitters_per_distributor"` // number of emitters per distributor
 }
 
 // EmitterServerStats tracks the performance of the emitter server
@@ -85,32 +87,39 @@ func (em *EmitterServer) Start() error {
 
 // initializeEmitters creates HTTP emitters for each distributor URL and adds them to the pool
 func (em *EmitterServer) initializeEmitters() error {
-	for i, distributorURL := range em.config.DistributorURLs {
-		emitterID := fmt.Sprintf("emitter-%d", i+1)
+	emitterCounter := 1
 
-		emitterConfig := models.EmitterConfig{
-			ID:             emitterID,
-			Endpoint:       distributorURL,
-			Timeout:        30 * time.Second,
-			RetryCount:     3,
-			RetryDelay:     1 * time.Second,
-			MaxConcurrency: em.config.MaxConcurrency,
-			BufferSize:     1000,
-			BatchSize:      em.config.BatchSize,
-			FlushInterval:  time.Duration(em.config.FlushInterval) * time.Millisecond,
+	for _, distributorURL := range em.config.DistributorURLs {
+		// Create configured number of emitters per distributor
+		for j := 0; j < em.config.EmittersPerDistributor; j++ {
+			emitterID := fmt.Sprintf("emitter-%d", emitterCounter)
+
+			emitterConfig := models.EmitterConfig{
+				ID:             emitterID,
+				Endpoint:       distributorURL,
+				Timeout:        30 * time.Second,
+				RetryCount:     3,
+				RetryDelay:     1 * time.Second,
+				MaxConcurrency: em.config.MaxConcurrency,
+				BufferSize:     1000,
+				BatchSize:      em.config.BatchSize,
+				FlushInterval:  time.Duration(em.config.FlushInterval) * time.Millisecond,
+			}
+
+			emitter := emitters.NewHTTPEmitter(emitterConfig)
+
+			// Add emitter to the pool
+			if err := em.emitterPool.AddEmitter(emitter); err != nil {
+				return fmt.Errorf("failed to add emitter %s to pool: %w", emitterID, err)
+			}
+
+			log.Printf("Initialized emitter %s for distributor %s", emitterID, distributorURL)
+			emitterCounter++
 		}
-
-		emitter := emitters.NewHTTPEmitter(emitterConfig)
-
-		// Add emitter to the pool
-		if err := em.emitterPool.AddEmitter(emitter); err != nil {
-			return fmt.Errorf("failed to add emitter %s to pool: %w", emitterID, err)
-		}
-
-		log.Printf("Initialized emitter %s for distributor %s", emitterID, distributorURL)
 	}
 
-	log.Printf("Initialized emitter pool with %d emitters", em.emitterPool.GetEmitterCount())
+	log.Printf("Initialized emitter pool with %d emitters (%d per distributor)",
+		em.emitterPool.GetEmitterCount(), em.config.EmittersPerDistributor)
 	return nil
 }
 
@@ -301,12 +310,13 @@ func (em *EmitterServer) handleStats(w http.ResponseWriter, r *http.Request) {
 			"uptime":             time.Since(stats.StartTime).String(),
 		},
 		"config": map[string]interface{}{
-			"port":                em.config.Port,
-			"log_generation_rate": em.config.LogGenerationRate,
-			"max_concurrency":     em.config.MaxConcurrency,
-			"batch_size":          em.config.BatchSize,
-			"flush_interval":      em.config.FlushInterval,
-			"distributor_count":   len(em.config.DistributorURLs),
+			"port":                     em.config.Port,
+			"log_generation_rate":      em.config.LogGenerationRate,
+			"max_concurrency":          em.config.MaxConcurrency,
+			"batch_size":               em.config.BatchSize,
+			"flush_interval":           em.config.FlushInterval,
+			"distributor_count":        len(em.config.DistributorURLs),
+			"emitters_per_distributor": em.config.EmittersPerDistributor,
 		},
 		"emitter_pool": map[string]interface{}{
 			"count": em.emitterPool.GetEmitterCount(),
@@ -385,26 +395,76 @@ func (em *EmitterServer) startContinuousGeneration() {
 	}
 }
 
+// loadConfig loads emitter server configuration from a JSON file
+func loadConfig(configPath string) (*EmitterServerConfig, error) {
+	// Read the config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file %s: %w", configPath, err)
+	}
+
+	// Parse the JSON configuration
+	var config EmitterServerConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Set default values if not provided
+	if config.EmittersPerDistributor <= 0 {
+		config.EmittersPerDistributor = 5 // Default to 5 emitters per distributor
+	}
+
+	// Validate configuration
+	if config.Port <= 0 {
+		return nil, fmt.Errorf("invalid port number: %d", config.Port)
+	}
+
+	if len(config.DistributorURLs) == 0 {
+		return nil, fmt.Errorf("no distributor URLs configured")
+	}
+
+	if config.LogGenerationRate <= 0 {
+		return nil, fmt.Errorf("invalid log generation rate: %d", config.LogGenerationRate)
+	}
+
+	if config.MaxConcurrency <= 0 {
+		return nil, fmt.Errorf("invalid max concurrency: %d", config.MaxConcurrency)
+	}
+
+	if config.BatchSize <= 0 {
+		return nil, fmt.Errorf("invalid batch size: %d", config.BatchSize)
+	}
+
+	if config.FlushInterval <= 0 {
+		return nil, fmt.Errorf("invalid flush interval: %d", config.FlushInterval)
+	}
+
+	log.Printf("Loaded configuration:")
+	log.Printf("  Port: %d", config.Port)
+	log.Printf("  Distributor URLs: %v", config.DistributorURLs)
+	log.Printf("  Log generation rate: %d logs/second", config.LogGenerationRate)
+	log.Printf("  Max concurrency: %d", config.MaxConcurrency)
+	log.Printf("  Batch size: %d", config.BatchSize)
+	log.Printf("  Flush interval: %d ms", config.FlushInterval)
+	log.Printf("  Emitters per distributor: %d", config.EmittersPerDistributor)
+
+	return &config, nil
+}
+
 func main() {
-	// Default configuration
-	config := EmitterServerConfig{
-		Port:              8084,
-		DistributorURLs:   []string{"http://localhost:8080/logs"},
-		LogGenerationRate: 10, // 10 logs per second
-		MaxConcurrency:    5,
-		BatchSize:         5,    // 5 messages per packet
-		FlushInterval:     1000, // 1 second
+	// Load configuration from JSON file
+	configPath := "config.json"
+	if len(os.Args) > 1 {
+		configPath = os.Args[1]
+	}
+
+	config, err := loadConfig(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Create and start emitter server
-	server := NewEmitterServer(config)
-
-	log.Printf("Starting emitter server with configuration:")
-	log.Printf("  Port: %d", config.Port)
-	log.Printf("  Distributors: %v", config.DistributorURLs)
-	log.Printf("  Log generation rate: %d logs/second", config.LogGenerationRate)
-	log.Printf("  Batch size: %d", config.BatchSize)
-	log.Printf("  Max concurrency: %d", config.MaxConcurrency)
+	server := NewEmitterServer(*config)
 
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start emitter server: %v", err)

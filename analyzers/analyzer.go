@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -90,13 +92,6 @@ func (a *BasicAnalyzer) GetProcessedCount() int64 {
 	defer a.mu.RUnlock()
 	return a.processed
 }
-
-// // GetStats returns the current analyzer statistics
-// func (a *BasicAnalyzer) GetStats() AnalyzerStats {
-// 	a.mu.RLock()
-// 	defer a.mu.RUnlock()
-// 	return a.stats
-// }
 
 // AnalyzerServer represents an HTTP server that receives and analyzes log messages
 type AnalyzerServer struct {
@@ -248,6 +243,16 @@ func main() {
 	// Default configuration
 	analyzerID := "analyzer-1"
 	port := 8081
+
+	// Parse command line arguments
+	if len(os.Args) > 1 {
+		analyzerID = os.Args[1]
+	}
+	if len(os.Args) > 2 {
+		if portArg, err := strconv.Atoi(os.Args[2]); err == nil {
+			port = portArg
+		}
+	}
 
 	// Create analyzer
 	analyzer := NewBasicAnalyzer(analyzerID)

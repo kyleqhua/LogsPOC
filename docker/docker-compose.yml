@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Emitter Server - generates logs and sends them to distributors
+  emitter-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.emitter
+    ports:
+      - "8080:8080"
+    depends_on:
+      - distributor
+    networks:
+      - resolve-network
+    restart: unless-stopped
+
+  # Distributor - receives logs and distributes them to analyzers
+  distributor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.distributor
+    ports:
+      - "8081:8080"
+    volumes:
+      - ../distributor/docker_config.json:/root/config.json
+    depends_on:
+      - analyzer-1
+      - analyzer-2
+      - analyzer-3
+    networks:
+      - resolve-network
+    restart: unless-stopped
+
+  # Analyzer 1
+  analyzer-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.analyzer
+    ports:
+      - "8082:8081"
+    command: ["./analyzer", "analyzer-1", "8081"]
+    networks:
+      - resolve-network
+    restart: unless-stopped
+
+  # Analyzer 2
+  analyzer-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.analyzer
+    ports:
+      - "8083:8082"
+    command: ["./analyzer", "analyzer-2", "8082"]
+    networks:
+      - resolve-network
+    restart: unless-stopped
+
+  # Analyzer 3
+  analyzer-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.analyzer
+    ports:
+      - "8084:8083"
+    command: ["./analyzer", "analyzer-3", "8083"]
+    networks:
+      - resolve-network
+    restart: unless-stopped
+
+networks:
+  resolve-network:
+    driver: bridge 
