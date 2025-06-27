@@ -1,14 +1,23 @@
 # Resolve - Distributed Log Processing System
 
-A distributed log processing system with emitter servers, distributors, and analyzers, all containerized with Docker.
+A robust, fault-tolerant distributed log processing system with emitter servers, distributors, and analyzers, all containerized with Docker. Features automatic message queuing, rerouting, and zero message loss even when analyzers fail.
+
+## Key Features
+
+- **Zero Message Loss**: Robust queue system ensures no messages are lost even when analyzers are down
+- **Automatic Rerouting**: Failed messages are automatically rerouted to healthy analyzers
+- **Dynamic Analyzer Control**: Enable/disable analyzers on-the-fly to simulate failures
+- **Weighted Load Balancing**: Intelligent distribution based on analyzer weights
+- **Health Monitoring**: Real-time health checks and queue status monitoring
+- **Accurate Metrics**: Precise message counting and distribution statistics
 
 ## Architecture
 
 The system consists of three main components:
 
-1. **Emitter Server** - Generates log messages and sends them to distributors
-2. **Distributor** - Receives logs and distributes them to analyzers using weighted load balancing
-3. **Analyzers** - Process individual log messages (multiple instances supported)
+1. **Emitter Server** - Generates log messages and sends them to distributors (250 messages per generate call)
+2. **Distributor** - Receives logs, distributes them using weighted load balancing, and queues failed messages for retry
+3. **Analyzers** - Process individual log messages with enable/disable capability (multiple instances supported)
 
 ## Docker Setup
 
@@ -36,7 +45,19 @@ The system consists of three main components:
    docker-compose up -d --build
    ```
 
-4. **View logs:**
+4. **Generate test logs:**
+   ```bash
+   cd docker
+   ./docker-scripts.sh generate
+   ```
+
+5. **Verify message distribution:**
+   ```bash
+   cd docker
+   ./docker-scripts.sh verify-weights
+   ```
+
+6. **View logs:**
    ```bash
    # From root directory
    ./docker.sh logs
@@ -51,7 +72,7 @@ The system consists of three main components:
    ./docker.sh logs analyzer-1
    ```
 
-5. **Stop all services:**
+7. **Stop all services:**
    ```bash
    # From root directory
    ./docker.sh stop
@@ -70,17 +91,49 @@ Once running, the following endpoints are available:
 - `GET /stats` - Statistics and configuration
 - `POST /start` - Start continuous log generation
 - `POST /stop` - Stop log generation
-- `POST /generate` - Generate a single batch of logs
+- `POST /generate` - Generate a single batch of logs (250 total messages)
 
 #### Distributor (Port 8081)
 - `GET /health` - Health check
+- `GET /queue` - Queue status (size, oldest message age)
 - `POST /logs` - Receive log packets from emitters
 
 #### Analyzers (Ports 8082, 8083, 8084)
 - `GET /health` - Health check
-- `GET /status` - Detailed status information
+- `GET /status` - Detailed status information (enabled/disabled, healthy/unhealthy)
 - `GET /processed` - Number of messages processed
 - `POST /analyze` - Analyze a log message
+- `POST /enable` - Enable the analyzer
+- `POST /disable` - Disable the analyzer
+
+### Testing Fault Tolerance
+
+#### Simulate Analyzer Failure
+```bash
+# Disable an analyzer
+curl -X POST http://localhost:8082/disable
+
+# Generate logs (messages will be queued/rerouted)
+./docker-scripts.sh generate
+
+# Check queue status
+curl -s http://localhost:8081/queue
+
+# Verify distribution (disabled analyzer should have 0 new messages)
+./docker-scripts.sh verify-weights
+```
+
+#### Test Recovery
+```bash
+# Re-enable the analyzer
+curl -X POST http://localhost:8082/enable
+
+# Generate more logs
+./docker-scripts.sh generate
+
+# Verify all analyzers are processing again
+./docker-scripts.sh verify-weights
+```
 
 ### Configuration
 
@@ -104,7 +157,7 @@ Edit `emitterServer/docker_config.json` to configure the emitter server:
 - `distributor_urls`: Array of distributor endpoints
 - `log_generation_rate`: Logs generated per second
 - `max_concurrency`: Maximum concurrent operations
-- `batch_size`: Number of messages per packet
+- `batch_size`: Number of messages per packet (50 × 5 emitters = 250 total messages per generate)
 - `flush_interval`: Flush interval in milliseconds
 - `emitters_per_distributor`: Number of emitters created per distributor (default: 5)
 
@@ -118,7 +171,6 @@ Edit `distributor/docker_config.json` to configure analyzers:
     {
       "id": "analyzer-1",
       "weight": 1.0,
-      "enabled": true,
       "endpoint": "http://analyzer-1:8081/analyze",
       "timeout": 10000,
       "retry_count": 3
@@ -127,10 +179,38 @@ Edit `distributor/docker_config.json` to configure analyzers:
 }
 ```
 
+**Configuration Options:**
+- `port`: HTTP server port
+- `analyzers`: Array of analyzer configurations
+  - `id`: Unique analyzer identifier
+  - `weight`: Load balancing weight (higher = more messages)
+  - `endpoint`: Analyzer's analyze endpoint
+  - `timeout`: Request timeout in milliseconds
+  - `retry_count`: Number of retry attempts before queuing
+
 #### Analyzer Configuration
 Analyzers are configured via command-line arguments:
 - First argument: Analyzer ID
 - Second argument: Port number
+
+### Message Flow and Reliability
+
+#### Normal Operation
+1. **Emitter** generates 250 messages (50 × 5 emitters) per `generate` call
+2. **Distributor** receives messages and distributes them using weighted load balancing
+3. **Analyzers** process messages and increment their processed count
+
+#### Fault Tolerance
+1. **Failed Delivery**: If an analyzer is disabled or unreachable, the distributor retries up to `retry_count` times
+2. **Message Queuing**: After all retries fail, messages are queued for later delivery
+3. **Automatic Rerouting**: Background worker attempts to deliver queued messages to alternative analyzers
+4. **Zero Loss**: Messages remain in queue until successfully delivered to any available analyzer
+
+#### Queue Management
+- **Background Processing**: Queue is processed every 2 seconds
+- **Alternative Selection**: Queued messages are sent to analyzers not previously tried
+- **Weighted Distribution**: Even queued messages follow weighted distribution among available analyzers
+- **Monitoring**: Queue status available via `/queue` endpoint
 
 ### Scaling
 
@@ -155,7 +235,6 @@ Analyzers are configured via command-line arguments:
    {
      "id": "analyzer-4",
      "weight": 1.5,
-     "enabled": true,
      "endpoint": "http://analyzer-4:8084/analyze",
      "timeout": 10000,
      "retry_count": 3
@@ -206,9 +285,21 @@ All services provide health check endpoints:
 - Distributor: `http://localhost:8081/health`
 - Analyzers: `http://localhost:8082/health`, `http://localhost:8083/health`, `http://localhost:8084/health`
 
-#### Statistics
+#### Statistics and Status
 - Emitter stats: `http://localhost:8080/stats`
+- Distributor queue status: `http://localhost:8081/queue`
 - Analyzer processed counts: `http://localhost:8082/processed`, etc.
+- Analyzer status: `http://localhost:8082/status`, etc.
+
+#### Message Distribution Verification
+```bash
+cd docker
+./docker-scripts.sh verify-weights
+```
+Shows:
+- Messages processed by each analyzer
+- Distribution percentages vs expected weights
+- Total messages processed vs expected (250 per generate call)
 
 ### Troubleshooting
 
@@ -220,6 +311,11 @@ All services provide health check endpoints:
 #### View Service Logs
 ```bash
 ./docker.sh logs [service-name]
+```
+
+#### Check Queue Status
+```bash
+curl -s http://localhost:8081/queue
 ```
 
 #### Restart a Service
@@ -278,10 +374,10 @@ resolve/
 │   ├── config.json            # Local development config
 │   └── docker_config.json     # Docker deployment config
 ├── distributor/               # Distributor source code
-│   ├── distributor.go         # Main distributor code
+│   ├── distributor.go         # Main distributor code with queue system
 │   ├── local_config.json      # Local development config
 │   └── docker_config.json     # Docker deployment config
-├── analyzers/                 # Analyzer source code
+├── analyzers/                 # Analyzer source code with enable/disable
 ├── emitters/                  # Emitter implementations
 ├── models/                    # Data models
 └── README.md                  # This file
@@ -292,14 +388,15 @@ resolve/
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Emitter       │    │   Distributor   │    │   Analyzer-1    │
-│   Server        │───▶│                 │───▶│                 │
-│   (Port 8080)   │    │   (Port 8081)   │    │   (Port 8082)   │
+│   Server        │───▶│   (with Queue)  │───▶│   (Enable/      │
+│   (Port 8080)   │    │   (Port 8081)   │    │    Disable)     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                 │
                                 ▼
                        ┌─────────────────┐    ┌─────────────────┐
                        │   Analyzer-2    │    │   Analyzer-3    │
-                       │   (Port 8083)   │    │   (Port 8084)   │
+                       │   (Enable/      │    │   (Enable/      │
+                       │    Disable)     │    │    Disable)     │
                        └─────────────────┘    └─────────────────┘
 ```
 
@@ -314,8 +411,18 @@ resolve/
 - Modify worker pool size in the distributor code
 - Adjust analyzer weights for load balancing
 - Configure timeouts and retry counts per analyzer
+- Queue processing interval (currently 2 seconds)
 
 ### Analyzers
 - Each analyzer runs in its own container
 - Scale horizontally by adding more analyzer instances
-- Monitor processing times and adjust accordingly 
+- Monitor processing times and adjust accordingly
+- Use enable/disable for maintenance or load testing
+
+## Reliability Features
+
+- **Message Persistence**: Failed messages are queued until delivery
+- **Automatic Recovery**: Messages are automatically rerouted when analyzers come back online
+- **Health Monitoring**: Real-time health checks and status monitoring
+- **Graceful Degradation**: System continues operating with reduced capacity when analyzers are down
+- **Zero Message Loss**: Guaranteed delivery through persistent queuing and retry mechanisms 

@@ -128,6 +128,61 @@ health_check() {
             print_error "$name: ${RED}UNHEALTHY${NC}"
         fi
     done
+    
+    echo
+    print_header "Analyzer Status Details"
+    
+    # Check analyzer status (enabled/disabled)
+    local analyzers=("analyzer-1:8082" "analyzer-2:8083" "analyzer-3:8084")
+    
+    for analyzer in "${analyzers[@]}"; do
+        local name=$(echo "$analyzer" | cut -d: -f1)
+        local port=$(echo "$analyzer" | cut -d: -f2)
+        
+        # Get status response
+        status_response=$(curl -s "http://localhost:$port/status" 2>/dev/null)
+        
+        if [ $? -eq 0 ] && [ -n "$status_response" ]; then
+            # Extract enabled status
+            enabled=$(echo "$status_response" | grep -o '"enabled":[^,]*' | grep -o '[^:]*$')
+            healthy=$(echo "$status_response" | grep -o '"healthy":[^,]*' | grep -o '[^:]*$')
+            
+            if [ "$enabled" = "true" ]; then
+                enabled_status="${GREEN}ENABLED${NC}"
+            else
+                enabled_status="${RED}DISABLED${NC}"
+            fi
+            
+            if [ "$healthy" = "true" ]; then
+                healthy_status="${GREEN}HEALTHY${NC}"
+            else
+                healthy_status="${RED}UNHEALTHY${NC}"
+            fi
+            
+            print_status "$name: $enabled_status | $healthy_status"
+        else
+            print_error "$name: ${RED}STATUS UNKNOWN${NC}"
+        fi
+    done
+    
+    echo
+    print_header "Queue Status"
+    
+    # Check distributor queue status
+    queue_response=$(curl -s "http://localhost:8081/queue" 2>/dev/null)
+    
+    if [ $? -eq 0 ] && [ -n "$queue_response" ]; then
+        queue_size=$(echo "$queue_response" | grep -o '"queue_size":[0-9]*' | grep -o '[0-9]*')
+        oldest_age=$(echo "$queue_response" | grep -o '"oldest_message_age":"[^"]*"' | cut -d'"' -f4)
+        
+        if [ "$queue_size" = "0" ]; then
+            print_status "Queue: ${GREEN}EMPTY${NC}"
+        else
+            print_status "Queue: ${YELLOW}$queue_size messages${NC} (oldest: $oldest_age)"
+        fi
+    else
+        print_error "Queue: ${RED}STATUS UNKNOWN${NC}"
+    fi
 }
 
 # Function to generate test logs
