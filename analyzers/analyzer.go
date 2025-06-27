@@ -116,6 +116,8 @@ func (as *AnalyzerServer) Start() error {
 	mux.HandleFunc("/health", as.handleHealth)
 	mux.HandleFunc("/status", as.handleStatus)
 	mux.HandleFunc("/processed", as.handleProcessed)
+	mux.HandleFunc("/disable", as.handleDisable)
+	mux.HandleFunc("/enable", as.handleEnable)
 
 	// Create server
 	as.server = &http.Server{
@@ -237,6 +239,52 @@ func (as *AnalyzerServer) handleProcessed(w http.ResponseWriter, r *http.Request
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleDisable disables the analyzer
+func (as *AnalyzerServer) handleDisable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Disable the analyzer
+	as.analyzer.SetEnabled(false)
+
+	response := map[string]interface{}{
+		"status":    "success",
+		"message":   "Analyzer disabled successfully",
+		"analyzer":  as.analyzer.GetID(),
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	json.NewEncoder(w).Encode(response)
+	log.Printf("Analyzer %s disabled via HTTP request", as.analyzer.GetID())
+}
+
+// handleEnable enables the analyzer
+func (as *AnalyzerServer) handleEnable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Enable the analyzer
+	as.analyzer.SetEnabled(true)
+
+	response := map[string]interface{}{
+		"status":    "success",
+		"message":   "Analyzer enabled successfully",
+		"analyzer":  as.analyzer.GetID(),
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	json.NewEncoder(w).Encode(response)
+	log.Printf("Analyzer %s enabled via HTTP request", as.analyzer.GetID())
 }
 
 func main() {

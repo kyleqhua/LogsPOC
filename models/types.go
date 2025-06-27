@@ -33,7 +33,6 @@ type Analyzer interface {
 type AnalyzerConfig struct {
 	ID         string  `json:"id"`
 	Weight     float64 `json:"weight"`
-	Enabled    bool    `json:"enabled"`
 	Endpoint   string  `json:"endpoint"` // e.g., "http://analyzer1:8080"
 	Timeout    int     `json:"timeout"`  // milliseconds
 	RetryCount int     `json:"retry_count"`

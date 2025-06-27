@@ -4,26 +4,23 @@
     {
       "id": "analyzer-1",
       "weight": 1.0,
-      "enabled": true,
       "endpoint": "http://localhost:8081/analyze",
       "timeout": 10000,
-      "retry_count": 3
+      "retry_count": 2
     },
     {
       "id": "analyzer-2",
       "weight": 2.0,
-      "enabled": true,
       "endpoint": "http://localhost:8082/analyze",
       "timeout": 10000,
-      "retry_count": 3
+      "retry_count": 2
     },
     {
       "id": "analyzer-3",
       "weight": 1.0,
-      "enabled": true,
       "endpoint": "http://localhost:8083/analyze",
       "timeout": 10000,
-      "retry_count": 3
+      "retry_count": 2
     }
   ]
 } 

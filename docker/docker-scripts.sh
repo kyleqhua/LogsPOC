@@ -133,8 +133,9 @@ health_check() {
 # Function to generate test logs
 generate_logs() {
     print_header "Generating test logs"
-    curl -X POST "http://localhost:8080/generate"
-    print_status "Test logs generated"
+    response=$(curl -s -X POST "http://localhost:8080/generate")
+    total_messages=$(echo "$response" | grep -o '"total_messages":[0-9]*' | grep -o '[0-9]*')
+    print_status "Test logs generated - $total_messages total messages sent"
 }
 
 # Function to start continuous log generation
@@ -179,6 +180,11 @@ verify_weights() {
         echo "analyzer-1: 25.00%"
         echo "analyzer-2: 50.00%"
         echo "analyzer-3: 25.00%"
+        echo
+        
+        echo "Note: Each 'generate' call sends 250 total messages (50 messages × 5 emitters)"
+        echo "Expected total per generate: 250 messages"
+        echo "Actual total processed: $total messages"
     else
         echo "No messages processed yet. Try generating some logs first."
     fi

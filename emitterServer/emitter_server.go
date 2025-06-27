@@ -371,12 +371,17 @@ func (em *EmitterServer) handleGenerateLogs(w http.ResponseWriter, r *http.Reque
 	packet := em.generateLogs()
 	em.sendLogs(packet)
 
+	// Calculate total messages sent (packet messages × number of emitters)
+	totalMessages := len(packet.Messages) * em.emitterPool.GetEmitterCount()
+
 	response := map[string]interface{}{
-		"status":    "generated",
-		"message":   "Log batch generated and sent",
-		"packet_id": packet.PacketID,
-		"messages":  len(packet.Messages),
-		"timestamp": time.Now().Format(time.RFC3339),
+		"status":          "generated",
+		"message":         "Log batch generated and sent",
+		"packet_id":       packet.PacketID,
+		"packet_messages": len(packet.Messages),
+		"emitters":        em.emitterPool.GetEmitterCount(),
+		"total_messages":  totalMessages,
+		"timestamp":       time.Now().Format(time.RFC3339),
 	}
 
 	json.NewEncoder(w).Encode(response)

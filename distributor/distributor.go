@@ -39,6 +39,17 @@ func NewDistributorServer(config models.DistributorConfig) *DistributorServer {
 	}
 }
 
+// // AnalyzerHealth tracks the health status of an analyzer
+// type AnalyzerHealth struct {
+// 	ID              string
+// 	LastSuccess     time.Time
+// 	LastFailure     time.Time
+// 	FailureCount    int
+// 	SuccessCount    int
+// 	IsHealthy       bool
+// 	LastHealthCheck time.Time
+// }
+
 // Start starts the HTTP server
 func (d *DistributorServer) Start() error {
 	// Set up routes
@@ -225,19 +236,19 @@ func (d *DistributorServer) distributeLogMessage(logMessage models.LogMessage) {
 }
 
 func (d *DistributorServer) selectAnalyzer() models.AnalyzerConfig {
-	// Filter enabled analyzers
-	var enabledAnalyzers []models.AnalyzerConfig
+	// Get all analyzers and check their health
+	var analyzers []models.AnalyzerConfig
 	var totalWeight float64
 
 	for _, analyzer := range d.config.Analyzers {
-		if analyzer.Enabled {
-			enabledAnalyzers = append(enabledAnalyzers, analyzer)
-			totalWeight += analyzer.Weight
-		}
-	}
+		// Check if analyzer is healthy by calling its health endpoint
+		// if d.isAnalyzerHealthy(analyzer) {
+		// 	analyzers = append(healthyAnalyzers, analyzer)
+		// 	totalWeight += analyzer.Weight
+		// }
 
-	if len(enabledAnalyzers) == 0 {
-		return models.AnalyzerConfig{}
+		analyzers = append(analyzers, analyzer)
+		totalWeight += analyzer.Weight
 	}
 
 	// Generate random number between 0 and total weight
@@ -246,16 +257,32 @@ func (d *DistributorServer) selectAnalyzer() models.AnalyzerConfig {
 
 	// Select analyzer based on weighted distribution
 	currentWeight := 0.0
-	for _, analyzer := range enabledAnalyzers {
+	for _, analyzer := range analyzers {
 		currentWeight += analyzer.Weight
 		if randomValue <= currentWeight {
 			return analyzer
 		}
 	}
 
-	// Fallback to first enabled analyzer (shouldn't reach here)
-	return enabledAnalyzers[0]
+	// Fallback to first healthy analyzer (shouldn't reach here)
+	return analyzers[0]
 }
+
+// // isAnalyzerHealthy checks if an analyzer is healthy by calling its health endpoint
+// func (d *DistributorServer) isAnalyzerHealthy(analyzer models.AnalyzerConfig) bool {
+// 	client := &http.Client{Timeout: 5 * time.Second}
+
+// 	// Try to hit the health endpoint
+// 	healthURL := strings.Replace(analyzer.Endpoint, "/analyze", "/health", 1)
+// 	resp, err := client.Get(healthURL)
+// 	if err != nil {
+// 		log.Printf("Health check failed for analyzer %s: %v", analyzer.ID, err)
+// 		return false
+// 	}
+// 	defer resp.Body.Close()
+
+// 	return resp.StatusCode == http.StatusOK
+// }
 
 // handleHealth provides a health check endpoint
 func (d *DistributorServer) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -289,27 +316,16 @@ func loadConfig(configPath string) (*models.DistributorConfig, error) {
 	// Calculate total weight
 	config.TotalWeight = 0
 	for _, analyzer := range config.Analyzers {
-		if analyzer.Enabled {
-			config.TotalWeight += analyzer.Weight
-		}
+		config.TotalWeight += analyzer.Weight
 	}
 
 	if config.TotalWeight <= 0 {
-		return nil, fmt.Errorf("no enabled analyzers with positive weights")
+		return nil, fmt.Errorf("no analyzers with positive weights")
 	}
 
 	log.Printf("Loaded configuration:")
 	log.Printf("  Port: %d", config.Port)
 	log.Printf("  Total analyzers: %d", len(config.Analyzers))
-	log.Printf("  Enabled analyzers: %d", func() int {
-		count := 0
-		for _, a := range config.Analyzers {
-			if a.Enabled {
-				count++
-			}
-		}
-		return count
-	}())
 	log.Printf("  Total weight: %.2f", config.TotalWeight)
 
 	return &config, nil
