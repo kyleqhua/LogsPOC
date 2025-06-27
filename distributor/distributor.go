@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 type DistributorServer struct {
 	config     models.DistributorConfig
 	client     *http.Client
-	workerPool chan struct{} // Semaphore to limit concurrent workers
+	workerPool chan struct{}
 }
 
 // NewDistributorServer creates a new distributor server
@@ -73,11 +74,11 @@ func (d *DistributorServer) handleLogPacket(w http.ResponseWriter, r *http.Reque
 	w.Write([]byte("Log packet received successfully"))
 
 	// Process log messages in parallel with backpressure control
-	// d.distributeLogMessagesParallel(packet.Messages)
+	d.distributeLogMessagesParallel(packet.Messages)
 
-	for _, message := range packet.Messages {
-		d.distributeLogMessage(message)
-	}
+	// for _, message := range packet.Messages {
+	// 	d.distributeLogMessage(message)
+	// }
 }
 
 // distributeLogMessagesParallel processes multiple log messages concurrently
@@ -121,7 +122,6 @@ func (d *DistributorServer) distributeLogMessage(logMessage models.LogMessage) {
 
 	log.Printf("Selected analyzer %s (weight: %.2f) for log message: %s",
 		analyzerConfig.ID, analyzerConfig.Weight, logMessage.ID)
-	// d.printLogMessage(logMessage)
 
 	// Create HTTP client with analyzer-specific timeout
 	timeout := time.Duration(analyzerConfig.Timeout) * time.Millisecond
@@ -263,29 +263,72 @@ func (d *DistributorServer) handleHealth(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte("Distributor is healthy"))
 }
 
-func (d *DistributorServer) printLogMessage(message models.LogMessage) {
-	fmt.Printf("\n=== LOG MESSAGE ===\n")
-	fmt.Printf("Message ID: %s\n", message.ID)
-	fmt.Printf("Timestamp: %s\n", message.Timestamp.Format(time.RFC3339))
-	fmt.Printf("Level: %s\n", message.Level)
-	fmt.Printf("Source: %s\n", message.Source)
+// loadConfig loads distributor configuration from a JSON file
+func loadConfig(configPath string) (*models.DistributorConfig, error) {
+	// Read the config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file %s: %w", configPath, err)
+	}
+
+	// Parse the JSON configuration
+	var config models.DistributorConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Validate configuration
+	if config.Port <= 0 {
+		return nil, fmt.Errorf("invalid port number: %d", config.Port)
+	}
+
+	if len(config.Analyzers) == 0 {
+		return nil, fmt.Errorf("no analyzers configured")
+	}
+
+	// Calculate total weight
+	config.TotalWeight = 0
+	for _, analyzer := range config.Analyzers {
+		if analyzer.Enabled {
+			config.TotalWeight += analyzer.Weight
+		}
+	}
+
+	if config.TotalWeight <= 0 {
+		return nil, fmt.Errorf("no enabled analyzers with positive weights")
+	}
+
+	log.Printf("Loaded configuration:")
+	log.Printf("  Port: %d", config.Port)
+	log.Printf("  Total analyzers: %d", len(config.Analyzers))
+	log.Printf("  Enabled analyzers: %d", func() int {
+		count := 0
+		for _, a := range config.Analyzers {
+			if a.Enabled {
+				count++
+			}
+		}
+		return count
+	}())
+	log.Printf("  Total weight: %.2f", config.TotalWeight)
+
+	return &config, nil
 }
 
 func main() {
+	// Load configuration from JSON file
+	configPath := "local_config.json"
+	if len(os.Args) > 1 {
+		configPath = os.Args[1]
+	}
+
+	config, err := loadConfig(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
 	// Create and start the distributor server
-	server := NewDistributorServer(models.DistributorConfig{
-		Port: 8080,
-		Analyzers: []models.AnalyzerConfig{
-			{
-				ID:         "analyzer-1",
-				Weight:     1,
-				Enabled:    true,
-				Endpoint:   "http://localhost:8081/analyze",
-				Timeout:    10000,
-				RetryCount: 3,
-			},
-		},
-	})
+	server := NewDistributorServer(*config)
 
 	if err := server.Start(); err != nil {
 		log.Fatalf("Failed to start distributor server: %v", err)

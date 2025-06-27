@@ -41,9 +41,9 @@ type AnalyzerConfig struct {
 
 // DistributorConfig holds the overall configuration
 type DistributorConfig struct {
-	Analyzers   []AnalyzerConfig
-	Port        int
-	TotalWeight float64 // calculated field
+	Analyzers   []AnalyzerConfig `json:"analyzers"`
+	Port        int              `json:"port"`
+	TotalWeight float64          `json:"-"` // calculated field, not serialized
 }
 
 // Emitter interface for sending log packets to the distributor

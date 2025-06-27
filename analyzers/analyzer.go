@@ -13,30 +13,20 @@ import (
 
 // BasicAnalyzer implements the Analyzer interface
 type BasicAnalyzer struct {
-	id      string
-	enabled bool
-	healthy bool
-	mu      sync.RWMutex
-	// stats   AnalyzerStats
+	id        string
+	enabled   bool
+	healthy   bool
+	mu        sync.RWMutex
+	processed int64
 }
-
-// // AnalyzerStats tracks analyzer performance
-// type AnalyzerStats struct {
-// 	MessagesProcessed int64
-// 	MessagesFailed    int64
-// 	StartTime         time.Time
-// 	LastMessageTime   time.Time
-// }
 
 // NewBasicAnalyzer creates a new basic analyzer
 func NewBasicAnalyzer(id string) *BasicAnalyzer {
 	return &BasicAnalyzer{
-		id:      id,
-		enabled: true,
-		healthy: true,
-		// stats: AnalyzerStats{
-		// 	StartTime: time.Now(),
-		// },
+		id:        id,
+		enabled:   true,
+		healthy:   true,
+		processed: 0,
 	}
 }
 
@@ -52,10 +42,6 @@ func (a *BasicAnalyzer) Analyze(logMessage models.LogMessage) error {
 	// Simulate analysis processing time
 	time.Sleep(10 * time.Millisecond)
 
-	// Update stats
-	// a.stats.MessagesProcessed++
-	// a.stats.LastMessageTime = time.Now()
-
 	// Print the analyzed message
 	fmt.Printf("[%s] Analyzed: %s [%s] %s: %s\n",
 		a.id,
@@ -64,11 +50,8 @@ func (a *BasicAnalyzer) Analyze(logMessage models.LogMessage) error {
 		logMessage.Source,
 		logMessage.Message)
 
-	// Simulate occasional failures (for testing)
-	// if logMessage.Level == "ERROR" && len(logMessage.Message)%7 == 0 {
-	// 	a.stats.MessagesFailed++
-	// 	return fmt.Errorf("simulated analysis failure for error message")
-	// }
+	// Increment processed count
+	a.processed++
 
 	return nil
 }
@@ -101,6 +84,13 @@ func (a *BasicAnalyzer) SetHealthy(healthy bool) {
 	fmt.Printf("Analyzer %s health status: %s\n", a.id, map[bool]string{true: "healthy", false: "unhealthy"}[healthy])
 }
 
+// GetProcessedCount returns the number of messages processed by this analyzer
+func (a *BasicAnalyzer) GetProcessedCount() int64 {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.processed
+}
+
 // // GetStats returns the current analyzer statistics
 // func (a *BasicAnalyzer) GetStats() AnalyzerStats {
 // 	a.mu.RLock()
@@ -130,6 +120,7 @@ func (as *AnalyzerServer) Start() error {
 	mux.HandleFunc("/analyze", as.handleAnalyze)
 	mux.HandleFunc("/health", as.handleHealth)
 	mux.HandleFunc("/status", as.handleStatus)
+	mux.HandleFunc("/processed", as.handleProcessed)
 
 	// Create server
 	as.server = &http.Server{
@@ -141,6 +132,7 @@ func (as *AnalyzerServer) Start() error {
 	log.Printf("Health check available at http://localhost:%d/health", as.port)
 	log.Printf("Status endpoint available at http://localhost:%d/status", as.port)
 	log.Printf("Analyze endpoint available at http://localhost:%d/analyze", as.port)
+	log.Printf("Processed count endpoint available at http://localhost:%d/processed", as.port)
 
 	return as.server.ListenAndServe()
 }
@@ -232,6 +224,21 @@ func (as *AnalyzerServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 			"address": fmt.Sprintf(":%d", as.port),
 		},
 		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleProcessed returns the number of messages processed by this analyzer
+func (as *AnalyzerServer) handleProcessed(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	processedCount := as.analyzer.GetProcessedCount()
+
+	response := map[string]interface{}{
+		"analyzer":        as.analyzer.GetID(),
+		"processed_count": processedCount,
+		"timestamp":       time.Now().Format(time.RFC3339),
 	}
 
 	json.NewEncoder(w).Encode(response)
